@@ -33,7 +33,7 @@ function formatRegionDescription(rect: OcrCropRect | undefined) {
   return i18n.t('Region: {{width}}×{{height}} at {{x}}, {{y}}', { width: pct(rect.width), height: pct(rect.height), x: pct(rect.x), y: pct(rect.y) });
 }
 
-export default function useOcrTimestamps({ filePath, workingRef, setWorking, setProgress, fileDuration, selectedSegments, safeSetCutSegments, showParametersDialog, getFfmpegParameters, setFfmpegParametersForDialog, showGenericDialog, ocrCropRect, setOcrCropRect, armOcrMarquee, compatPlayerEnabled, seekAbs, formatTimecode, appendFfmpegCommandLog, handleError }: {
+export default function useOcrTimestamps({ filePath, workingRef, setWorking, setProgress, fileDuration, selectedSegments, safeSetCutSegments, showParametersDialog, getFfmpegParameters, setFfmpegParametersForDialog, showGenericDialog, ocrCropRect, setOcrCropRect, armOcrMarquee, compatPlayerEnabled, seekAbs, formatTimecode, appendFfmpegCommandLog, handleError, ocrTimestampTagName, setOcrTimestampTagName }: {
   filePath: string | undefined,
   workingRef: MutableRefObject<boolean>,
   setWorking: (w: { text: string, abortController?: AbortController } | undefined) => void,
@@ -60,6 +60,9 @@ export default function useOcrTimestamps({ filePath, workingRef, setWorking, set
   formatTimecode: FormatTimecode,
   appendFfmpegCommandLog: (args: string[]) => void,
   handleError: (a: { err: unknown, title: string }) => void,
+  // persisted so that export knows which tag holds the recording time
+  ocrTimestampTagName: string,
+  setOcrTimestampTagName: (name: string) => void,
 }) {
   // Detected rows outlive the dialog so the user can close it, scrub the timeline, and come
   // back without re-running OCR. Kept in a ref: nothing in the UI renders from it, and it must
@@ -143,8 +146,7 @@ export default function useOcrTimestamps({ filePath, workingRef, setWorking, set
         errorToast(i18n.t('No segments are selected'));
         return;
       }
-      const tagName = getFfmpegParameters('ocrTimestamp')['tagName']?.trim() || 'recordedAt';
-      const fromTags = buildReviewFromTags(tagName);
+      const fromTags = buildReviewFromTags(ocrTimestampTagName);
       if (fromTags == null) {
         errorToast(i18n.t('No timestamps to review yet. Run "OCR timestamps" first.'));
         return;
@@ -153,7 +155,7 @@ export default function useOcrTimestamps({ filePath, workingRef, setWorking, set
     }
 
     await openReview();
-  }, [buildReviewFromTags, getFfmpegParameters, openReview, selectedSegments.length, workingRef]);
+  }, [buildReviewFromTags, ocrTimestampTagName, openReview, selectedSegments.length, workingRef]);
 
   const ocrTimestamps = useCallback(async () => {
     if (filePath == null) return;
@@ -180,7 +182,7 @@ export default function useOcrTimestamps({ filePath, workingRef, setWorking, set
           title: i18n.t('OCR timestamps'),
           description: i18n.t('Read a burned-in (baked) timestamp from each selected segment using OCR, and save it to a segment tag.'),
           dialogType,
-          parameters: getFfmpegParameters(dialogType),
+          parameters: { ...getFfmpegParameters(dialogType), tagName: ocrTimestampTagName },
           extra: {
             label: i18n.t('Draw region'),
             description: formatRegionDescription(cropRect),
@@ -217,6 +219,7 @@ export default function useOcrTimestamps({ filePath, workingRef, setWorking, set
       const { customFormat } = parameters;
 
       setFfmpegParametersForDialog(dialogType, parameters);
+      setOcrTimestampTagName(tagName); // export reads this to write creation_time
 
       const abortController = new AbortController();
       setWorking({ text: i18n.t('Detecting timestamps'), abortController });
@@ -291,7 +294,7 @@ export default function useOcrTimestamps({ filePath, workingRef, setWorking, set
       if (err instanceof Error && err.name === 'AbortError') return;
       handleError({ err, title: i18n.t('Failed to OCR timestamps') });
     }
-  }, [filePath, workingRef, selectedSegments, ocrCropRect, showParametersDialog, getFfmpegParameters, setFfmpegParametersForDialog, setWorking, setProgress, compatPlayerEnabled, armOcrMarquee, setOcrCropRect, fileDuration, appendFfmpegCommandLog, formatTimecode, handleError, openReview]);
+  }, [filePath, workingRef, selectedSegments, ocrCropRect, showParametersDialog, getFfmpegParameters, setFfmpegParametersForDialog, setWorking, setProgress, compatPlayerEnabled, armOcrMarquee, setOcrCropRect, fileDuration, appendFfmpegCommandLog, formatTimecode, handleError, openReview, ocrTimestampTagName, setOcrTimestampTagName]);
 
   return { ocrTimestamps, reviewOcrTimestamps };
 }

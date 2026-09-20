@@ -175,6 +175,8 @@ export default function useUserSettingsRoot() {
   useEffect(() => safeSetConfig({ cleanupChoices }), [cleanupChoices]);
   const [ocrCropRect, setOcrCropRect] = useState(safeGetConfigInitial('ocrCropRect'));
   useEffect(() => safeSetConfig({ ocrCropRect }), [ocrCropRect]);
+  const [ocrTimestampTagName, setOcrTimestampTagName] = useState(safeGetConfigInitial('ocrTimestampTagName'));
+  useEffect(() => safeSetConfig({ ocrTimestampTagName }), [ocrTimestampTagName]);
   const [allowMultipleInstances, setAllowMultipleInstances] = useState(safeGetConfigInitial('allowMultipleInstances'));
   useEffect(() => safeSetConfig({ allowMultipleInstances }), [allowMultipleInstances]);
   const [darkMode, setDarkMode] = useState(safeGetConfigInitial('darkMode'));
@@ -307,6 +309,7 @@ export default function useUserSettingsRoot() {
     enableUpdateCheck,
     cleanupChoices,
     ocrCropRect,
+    ocrTimestampTagName,
     allowMultipleInstances,
     darkMode,
     preferStrongColors,
@@ -390,6 +393,7 @@ export default function useUserSettingsRoot() {
     setEnableUpdateCheck,
     setCleanupChoices,
     setOcrCropRect,
+    setOcrTimestampTagName,
     setAllowMultipleInstances,
     toggleDarkMode,
     setPreferStrongColors,

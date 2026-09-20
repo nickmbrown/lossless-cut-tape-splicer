@@ -226,3 +226,17 @@ export function splitTimestampValue(value: string): TimestampParts {
 export function joinTimestampValue({ date, time }: TimestampParts) {
   return [date, time].filter((part) => part != null).join(' ');
 }
+
+// Converts a stored timestamp tag into the form ffmpeg accepts for `creation_time`.
+// Two things matter here (both verified against ffmpeg):
+// - "1993-03-07 19:51" is rejected outright: it needs the "T" separator and seconds.
+// - a naive time is read as the *exporting machine's* local time and converted to UTC, which
+//   shifts the clock. The burned-in time is what the camera showed, so we mark it as UTC ("Z")
+//   to store exactly those digits.
+export function toFfmpegCreationTime(value: string | undefined) {
+  if (value == null) return undefined;
+  const { date, time } = splitTimestampValue(value);
+  if (date == null || time == null) return undefined;
+  const withSeconds = time.length > 5 ? time : `${time}:00`;
+  return `${date}T${withSeconds}Z`;
+}

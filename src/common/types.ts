@@ -108,6 +108,8 @@ export interface Config {
   },
   // normalized to the video frame (0..1)
   ocrCropRect: OcrCropRect | undefined,
+  // segment tag holding the recording time; also written to exported files as creation_time
+  ocrTimestampTagName: string,
   allowMultipleInstances: boolean,
   darkMode: boolean,
   preferStrongColors: boolean,

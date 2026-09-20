@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { cleanOcrText, parseOcrTimestamp, sanitizeTagValue } from './ocrTimestamp';
+import { cleanOcrText, parseOcrTimestamp, sanitizeTagValue, toFfmpegCreationTime } from './ocrTimestamp';
 
 describe('cleanOcrText', () => {
   it('collapses whitespace and strips control characters', () => {
@@ -148,5 +148,21 @@ describe('parseOcrTimestamp', () => {
 describe('sanitizeTagValue', () => {
   it('strips control chars and collapses whitespace', () => {
     expect(sanitizeTagValue(' 2003-07-14\n18:32 ')).toBe('2003-07-14 18:32');
+  });
+});
+
+describe('toFfmpegCreationTime', () => {
+  it('produces a value ffmpeg accepts, preserving the wall clock', () => {
+    // ffmpeg rejects "1993-03-07 19:51" and shifts naive times by the local offset,
+    // so the T separator, seconds and the explicit Z are all required
+    expect(toFfmpegCreationTime('1993-03-07 19:51')).toBe('1993-03-07T19:51:00Z');
+    expect(toFfmpegCreationTime('2003-07-14 18:32:05')).toBe('2003-07-14T18:32:05Z');
+  });
+
+  it('returns undefined when there is no complete date and time', () => {
+    expect(toFfmpegCreationTime(undefined)).toBeUndefined();
+    expect(toFfmpegCreationTime('1993-03-07')).toBeUndefined();
+    expect(toFfmpegCreationTime('19:51')).toBeUndefined();
+    expect(toFfmpegCreationTime('not a timestamp')).toBeUndefined();
   });
 });

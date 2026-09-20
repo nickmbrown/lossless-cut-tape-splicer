@@ -160,6 +160,7 @@ const defaults: Config = {
     trashTmpFiles: true, askForCleanup: true, closeFile: true, cleanupAfterExport: false,
   },
   ocrCropRect: undefined,
+  ocrTimestampTagName: 'recordedAt',
   allowMultipleInstances: false,
   darkMode: true,
   preferStrongColors: false,
