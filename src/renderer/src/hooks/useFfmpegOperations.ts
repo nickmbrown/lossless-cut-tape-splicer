@@ -9,7 +9,7 @@ import { isCuttingStart, isCuttingEnd, runFfmpegWithProgress, getFfCommandLine, 
 import { getEffectiveAvoidNegativeTs, getMapStreamsArgs, getStreamIdsToCopy } from '../util/streams';
 import { needsSmartCut, getCodecParams } from '../smartcut';
 import { getGuaranteedSegments, isDurationValid } from '../segments';
-import { toFfmpegCreationTime } from '../util/ocrTimestamp';
+import { toFfmpegCreationTime, toRecordingInstant } from '../util/ocrTimestamp';
 import type { FFprobeStream } from '../../../common/ffprobe';
 import type { AvoidNegativeTs, FfmpegHwAccel, Html5ifyMode, PreserveMetadata } from '../../../common/types';
 import { deleteDispositionValue, type AllFilesMeta, type Chapter, type CopyfileStreams, type LiteFFprobeStream, type ParamsByFile, type SegmentToExport } from '../types';
@@ -602,6 +602,8 @@ function useFfmpegOperations({ filePath, treatInputFileModifiedTimeAsStart, trea
 
     const segments = getGuaranteedSegments(segmentsIn, fileDuration);
 
+    const recordingFileTimes: { path: string, ms: number }[] = [];
+
     const singleProgresses: Record<number, number> = {};
     function onSingleProgress(id: number, singleProgress: number) {
       singleProgresses[id] = singleProgress;
@@ -620,15 +622,21 @@ function useFfmpegOperations({ filePath, treatInputFileModifiedTimeAsStart, trea
     const cutSegment = async ({ start: desiredCutFrom, end: cutTo }: { start: number, end: number }, i: number) => {
       // the OCR'd recording time (if any) becomes this clip's creation_time
       const segment = segments[i];
-      const recordingTime = recordingTimeTagName != null && segment != null && 'tags' in segment
-        ? toFfmpegCreationTime(segment.tags?.[recordingTimeTagName])
+      const recordedAt = recordingTimeTagName != null && segment != null && 'tags' in segment
+        ? segment.tags?.[recordingTimeTagName]
         : undefined;
+      const recordingTime = toFfmpegCreationTime(recordedAt);
+      const recordingInstant = toRecordingInstant(recordedAt);
       const extraMetadata = recordingTime != null ? { creation_time: recordingTime } : undefined;
 
       const onProgress = (progress: number) => onSingleProgress(i, progress / 2);
       const onConcatProgress = (progress: number) => onSingleProgress(i, (1 + progress) / 2);
 
       const finalOutPath = join(outputDir, cutFileNames[i]!);
+
+      // stamped onto the file itself once it exists (see below), so that "date created"/
+      // "date modified" show when the footage was shot rather than when it was exported
+      if (recordingInstant != null) recordingFileTimes.push({ path: finalOutPath, ms: recordingInstant.getTime() });
 
       if (await shouldSkipExistingFile(finalOutPath)) return { path: finalOutPath, created: false };
 
@@ -740,7 +748,12 @@ function useFfmpegOperations({ filePath, treatInputFileModifiedTimeAsStart, trea
     };
 
     try {
-      return await pMap(segments, cutSegment, { concurrency: 1 });
+      const cutResults = await pMap(segments, cutSegment, { concurrency: 1 });
+
+    // after the files exist: ffmpeg's own timestamp transfer has run by now, so this wins
+    if (recordingFileTimes.length > 0) await mainApi.setFileTimes(recordingFileTimes);
+
+    return cutResults;
     } finally {
       if (chaptersPath) await tryDeleteFiles([chaptersPath]);
     }

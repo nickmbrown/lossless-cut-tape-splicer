@@ -227,16 +227,26 @@ export function joinTimestampValue({ date, time }: TimestampParts) {
   return [date, time].filter((part) => part != null).join(' ');
 }
 
-// Converts a stored timestamp tag into the form ffmpeg accepts for `creation_time`.
-// Two things matter here (both verified against ffmpeg):
-// - "1993-03-07 19:51" is rejected outright: it needs the "T" separator and seconds.
-// - a naive time is read as the *exporting machine's* local time and converted to UTC, which
-//   shifts the clock. The burned-in time is what the camera showed, so we mark it as UTC ("Z")
-//   to store exactly those digits.
-export function toFfmpegCreationTime(value: string | undefined) {
+// the wall clock on the tape, as an absolute instant in this machine's timezone
+export function toRecordingInstant(value: string | undefined) {
   if (value == null) return undefined;
   const { date, time } = splitTimestampValue(value);
   if (date == null || time == null) return undefined;
-  const withSeconds = time.length > 5 ? time : `${time}:00`;
-  return `${date}T${withSeconds}Z`;
+  const [year, month, day] = date.split('-').map(Number);
+  const [hours, minutes, seconds] = time.split(':').map(Number);
+  if (year == null || month == null || day == null || hours == null || minutes == null) return undefined;
+  const instant = new Date(year, month - 1, day, hours, minutes, seconds ?? 0);
+  return Number.isNaN(instant.getTime()) ? undefined : instant;
+}
+
+// Converts a stored timestamp tag into the form ffmpeg accepts for `creation_time`.
+// Verified against ffmpeg and Windows Explorer:
+// - "1993-03-07 19:51" is rejected outright: the T separator and seconds are required.
+// - the field is always stored as UTC, and players/Explorer ("Media created") convert it back
+//   to the viewer's local time. So the burned-in wall clock is treated as local time here and
+//   converted to the matching UTC instant - otherwise everything displays offset by the
+//   local timezone (e.g. 5:42 AM showing up as 1:42 AM at UTC-4).
+export function toFfmpegCreationTime(value: string | undefined) {
+  const instant = toRecordingInstant(value);
+  return instant != null ? instant.toISOString().replace(/\.\d{3}Z$/, 'Z') : undefined;
 }

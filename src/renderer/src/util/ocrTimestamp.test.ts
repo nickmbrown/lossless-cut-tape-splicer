@@ -152,11 +152,19 @@ describe('sanitizeTagValue', () => {
 });
 
 describe('toFfmpegCreationTime', () => {
-  it('produces a value ffmpeg accepts, preserving the wall clock', () => {
-    // ffmpeg rejects "1993-03-07 19:51" and shifts naive times by the local offset,
-    // so the T separator, seconds and the explicit Z are all required
-    expect(toFfmpegCreationTime('1993-03-07 19:51')).toBe('1993-03-07T19:51:00Z');
-    expect(toFfmpegCreationTime('2003-07-14 18:32:05')).toBe('2003-07-14T18:32:05Z');
+  // asserted as a round trip so the test holds in any timezone: the stored UTC instant must
+  // come back as the same wall clock the camera burned in, which is what Explorer/players show
+  it('stores the instant that displays as the original wall clock locally', () => {
+    const iso = toFfmpegCreationTime('1995-10-12 05:42');
+    expect(iso).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    const back = new Date(iso!);
+    expect([back.getFullYear(), back.getMonth() + 1, back.getDate()]).toEqual([1995, 10, 12]);
+    expect([back.getHours(), back.getMinutes()]).toEqual([5, 42]);
+  });
+
+  it('keeps seconds when they are known', () => {
+    const back = new Date(toFfmpegCreationTime('2003-07-14 18:32:05')!);
+    expect([back.getHours(), back.getMinutes(), back.getSeconds()]).toEqual([18, 32, 5]);
   });
 
   it('returns undefined when there is no complete date and time', () => {

@@ -37,6 +37,7 @@ import './i18n.js';
 import type { ApiActionRequest } from '../common/types.js';
 import * as ffmpeg from './ffmpeg.js';
 import * as ocr from './ocr.js';
+import { setFileTimes } from './fileTimes.js';
 import * as compatPlayer from './compatPlayer.js';
 import { downloadMediaUrl } from './ffmpeg.js';
 import { hasDisabledNetworking, setDisableNetworking } from './networking.js';
@@ -448,6 +449,7 @@ function sendOsNotification(options: NotificationConstructorOptions) {
 
 const remoteApi = {
   pathExists,
+  setFileTimes,
   downloadMediaUrl,
   fileTypeFromFile,
   focusWindow,
