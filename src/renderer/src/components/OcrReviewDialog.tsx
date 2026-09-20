@@ -29,7 +29,7 @@ export interface OcrReviewRow {
   label: string,
   timecode: string,
   start: number,
-  image: Uint8Array,
+  image: Uint8Array | undefined, // absent when resuming from saved tags rather than a detection run
   rawText: string,
   parsedValue: string | undefined,
   partialValue: string | undefined, // e.g. a time whose date could not be determined
@@ -88,10 +88,9 @@ export default async function openOcrReviewDialog({ showGenericDialog, rows, tag
       // breaks under React StrictMode, which mounts, unmounts and remounts components in
       // development: the cleanup revokes the URLs, but the memo never re-runs to recreate them.)
       useEffect(() => {
-        const urls = Object.fromEntries(rows.map((row) => [
-          row.segId,
-          URL.createObjectURL(safeCreateBlob(row.image, { type: 'image/png' })),
-        ]));
+        const urls = Object.fromEntries(rows.flatMap((row) => (row.image != null && row.image.length > 0
+          ? [[row.segId, URL.createObjectURL(safeCreateBlob(row.image, { type: 'image/png' }))]]
+          : [])));
         setImageUrls(urls);
         return () => Object.values(urls).forEach((url) => URL.revokeObjectURL(url));
         // `rows` is fixed for the lifetime of the dialog (it comes from the enclosing scope)
@@ -166,7 +165,9 @@ export default async function openOcrReviewDialog({ showGenericDialog, rows, tag
                           </button>
                         </td>
                         <td style={{ padding: '.3em .5em' }}>
-                          {imageUrl != null && failedUrls[imageUrl] ? (
+                          {row.image == null || row.image.length === 0 ? (
+                            <span style={{ opacity: 0.5 }} title={t('No preview: these values were loaded from the saved segment tags')}>—</span>
+                          ) : (imageUrl != null && failedUrls[imageUrl] ? (
                             // surfaces *why* a preview is missing instead of showing an empty cell
                             <span style={{ opacity: 0.6, fontSize: '.85em', whiteSpace: 'nowrap' }}>
                               {t('Preview unavailable ({{bytes}} bytes)', { bytes: row.image.length })}
@@ -180,7 +181,7 @@ export default async function openOcrReviewDialog({ showGenericDialog, rows, tag
                             >
                               <img src={imageUrl} alt="" onError={() => setFailedUrls((existing) => ({ ...existing, [imageUrl!]: true }))} style={{ maxWidth: '18em', maxHeight: '4.5em', display: 'block' }} />
                             </button>
-                          )}
+                          ))}
                         </td>
                         <td style={{ padding: '.3em .5em', maxWidth: '12em' }}>
                           <div style={{ fontFamily: 'monospace', opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis' }}>

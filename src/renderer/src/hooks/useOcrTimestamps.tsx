@@ -103,15 +103,57 @@ export default function useOcrTimestamps({ filePath, workingRef, setWorking, set
     }
   }, [safeSetCutSegments, seekAbs, showGenericDialog]);
 
-  // reopen the editor for the last detection run
+  // Rebuild an editing session from timestamps already saved on the segments, so that reopening
+  // a project (where the in-memory session is gone) still picks up where the user left off.
+  // There are no frame previews here - this reads tags, it does not run OCR again.
+  const buildReviewFromTags = useCallback((tagName: string) => {
+    const chronological = [...selectedSegments].sort((a, b) => a.start - b.start);
+    const savedValues = chronological.map((segment) => getSegmentTags(segment)[tagName]);
+    if (savedValues.every((value) => value == null || value.trim() === '')) return undefined;
+
+    // run the same inference over the saved values, so clips still missing a timestamp get an
+    // estimate from their neighbours instead of coming back empty
+    const inferred = inferTimestamps(savedValues.map((value) => (value != null && value.trim() !== '' ? value.trim() : undefined)));
+
+    const rows: OcrReviewRow[] = chronological.map((segment, i) => {
+      const { value, partial, estimated, outOfOrder } = inferred[i]!;
+      const saved = savedValues[i];
+      return {
+        segId: segment.segId,
+        label: segment.name || String(i + 1),
+        timecode: formatTimecode({ seconds: segment.start, shorten: true }),
+        start: segment.start,
+        image: undefined,
+        rawText: saved ?? '',
+        parsedValue: value,
+        partialValue: partial,
+        estimated,
+        outOfOrder,
+      };
+    });
+    return { rows, tagName, states: undefined };
+  }, [formatTimecode, selectedSegments]);
+
+  // reopen the editor: the last detection run if we still have it, otherwise the saved tags
   const reviewOcrTimestamps = useCallback(async () => {
     if (workingRef.current) return;
+
     if (pendingReviewRef.current == null) {
-      errorToast(i18n.t('No OCR results to review yet. Run "OCR timestamps" first.'));
-      return;
+      if (selectedSegments.length === 0) {
+        errorToast(i18n.t('No segments are selected'));
+        return;
+      }
+      const tagName = getFfmpegParameters('ocrTimestamp')['tagName']?.trim() || 'recordedAt';
+      const fromTags = buildReviewFromTags(tagName);
+      if (fromTags == null) {
+        errorToast(i18n.t('No timestamps to review yet. Run "OCR timestamps" first.'));
+        return;
+      }
+      pendingReviewRef.current = fromTags;
     }
+
     await openReview();
-  }, [openReview, workingRef]);
+  }, [buildReviewFromTags, getFfmpegParameters, openReview, selectedSegments.length, workingRef]);
 
   const ocrTimestamps = useCallback(async () => {
     if (filePath == null) return;
