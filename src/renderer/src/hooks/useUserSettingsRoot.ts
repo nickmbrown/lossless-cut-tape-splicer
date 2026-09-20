@@ -173,6 +173,8 @@ export default function useUserSettingsRoot() {
   useEffect(() => safeSetConfig({ enableUpdateCheck }), [enableUpdateCheck]);
   const [cleanupChoices, setCleanupChoices] = useState(safeGetConfigInitial('cleanupChoices'));
   useEffect(() => safeSetConfig({ cleanupChoices }), [cleanupChoices]);
+  const [ocrCropRect, setOcrCropRect] = useState(safeGetConfigInitial('ocrCropRect'));
+  useEffect(() => safeSetConfig({ ocrCropRect }), [ocrCropRect]);
   const [allowMultipleInstances, setAllowMultipleInstances] = useState(safeGetConfigInitial('allowMultipleInstances'));
   useEffect(() => safeSetConfig({ allowMultipleInstances }), [allowMultipleInstances]);
   const [darkMode, setDarkMode] = useState(safeGetConfigInitial('darkMode'));
@@ -304,6 +306,7 @@ export default function useUserSettingsRoot() {
     enableNativeHevc,
     enableUpdateCheck,
     cleanupChoices,
+    ocrCropRect,
     allowMultipleInstances,
     darkMode,
     preferStrongColors,
@@ -386,6 +389,7 @@ export default function useUserSettingsRoot() {
     setEnableNativeHevc,
     setEnableUpdateCheck,
     setCleanupChoices,
+    setOcrCropRect,
     setAllowMultipleInstances,
     toggleDarkMode,
     setPreferStrongColors,

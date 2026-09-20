@@ -574,6 +574,25 @@ export async function captureFrameToFile({ timestamp, videoPath, outPath, qualit
   return args;
 }
 
+// PNG (lossless) because the image is intended for OCR
+export async function captureFrameToBuffer({ timestamp, videoPath, filter }: {
+  timestamp: number,
+  videoPath: string,
+  filter?: string | undefined,
+}) {
+  const args = [
+    '-ss', String(timestamp),
+    '-i', videoPath,
+    '-frames:v', '1',
+    ...(filter != null ? ['-vf', filter] : []),
+    '-c:v', 'png',
+    '-f', 'image2',
+    '-',
+  ];
+  const { stdout } = await runFfmpegProcess(args);
+  return { buffer: Buffer.from(stdout), ffmpegArgs: args };
+}
+
 
 async function readFormatData(filePath: string): Promise<FFprobeFormat> {
   logger.info('readFormatData', filePath);

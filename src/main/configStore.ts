@@ -159,6 +159,7 @@ const defaults: Config = {
   cleanupChoices: {
     trashTmpFiles: true, askForCleanup: true, closeFile: true, cleanupAfterExport: false,
   },
+  ocrCropRect: undefined,
   allowMultipleInstances: false,
   darkMode: true,
   preferStrongColors: false,

@@ -157,6 +157,7 @@
     "morgan": "^1.12.0",
     "semver": "^7.8.1",
     "string-to-stream": "^3.0.1",
+    "tesseract.js": "^7.0.0",
     "winston": "^3.19.0",
     "yargs-parser": "^22.0.0",
     "zod": "^4.4.3"
@@ -174,6 +175,10 @@
     "asar": {
       "smartUnpack": false
     },
+    "asarUnpack": [
+      "**/node_modules/tesseract.js/**",
+      "**/node_modules/tesseract.js-core/**"
+    ],
     "electronFuses": {
       "runAsNode": false,
       "enableNodeOptionsEnvironmentVariable": false,
@@ -187,6 +192,10 @@
       {
         "from": "locales",
         "to": "locales"
+      },
+      {
+        "from": "tessdata",
+        "to": "tessdata"
       }
     ],
     "mac": {

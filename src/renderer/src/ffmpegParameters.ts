@@ -40,6 +40,24 @@ const parametersRaw = {
       hint: () => i18n.t('Minimum change between two frames to be considered a new scene. A value between 0.3 and 0.5 is generally a sane choice.'),
     },
   },
+  ocrTimestamp: {
+    tagName: {
+      value: 'recordedAt',
+      hint: () => i18n.t('Name of the segment tag to write the timestamp to.'),
+    },
+    frameOffset: {
+      value: '1.0',
+      hint: () => i18n.t('How many seconds into each segment to capture the frame used for OCR (to avoid transition frames at the segment start).'),
+    },
+    dateOrder: {
+      value: 'auto',
+      hint: () => i18n.t('How to interpret ambiguous numeric dates like 01/02/2003: "auto", "DMY" (day first), "MDY" (month first) or "YMD" (year first).'),
+    },
+    customFormat: {
+      value: '',
+      hint: () => i18n.t('Optional: a date/time format to parse the OCR text with (e.g. "dd.MM.yyyy HH:mm:ss"), overriding automatic detection. Leave empty for automatic detection.'),
+    },
+  },
 };
 
 export type FfmpegDialog = keyof typeof parametersRaw;

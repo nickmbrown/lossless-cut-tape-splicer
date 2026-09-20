@@ -239,12 +239,14 @@ function useSegments({ filePath, workingRef, setWorking, setProgress, videoStrea
     return parameters;
   }, [ffmpegParameters]);
 
-  const showParametersDialog = useCallback(async ({ title, description, dialogType, parameters: parametersIn, docUrl }: {
+  const showParametersDialog = useCallback(async ({ title, description, dialogType, parameters: parametersIn, docUrl, extra }: {
     title?: string,
     description?: string,
     dialogType: FfmpegDialog,
     parameters: ParameterDialogParameters,
     docUrl?: string,
+    // an optional extra action button which closes the dialog (resolving undefined) after calling onClick
+    extra?: { label: string, description?: string, onClick: () => void },
   }) => new Promise<ParameterDialogParameters | undefined>((resolve) => {
     function ParametersDialog() {
       const { onOpenChange } = useGenericDialogContext();
@@ -291,6 +293,13 @@ function useSegments({ filePath, workingRef, setWorking, setProgress, videoStrea
                 </div>
               );
             })}
+
+            {extra != null && (
+              <div style={{ marginBottom: '.5em', display: 'flex', alignItems: 'center', gap: '.5em' }}>
+                {extra.description != null && <span style={{ opacity: 0.7 }}>{extra.description}</span>}
+                <Button type="button" onClick={() => { extra.onClick(); onOpenChange(false); }}>{extra.label}</Button>
+              </div>
+            )}
 
             <ButtonRow>
               <Dialog.Close asChild>
@@ -1023,6 +1032,10 @@ function useSegments({ filePath, workingRef, setWorking, setProgress, videoStrea
     findSegmentsAtCursor,
     currentCutSegOrWholeTimeline,
     segColorCounter,
+    showParametersDialog,
+    getFfmpegParameters,
+    setFfmpegParametersForDialog,
+    safeSetCutSegments,
   };
 }
 

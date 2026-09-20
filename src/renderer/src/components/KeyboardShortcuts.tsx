@@ -472,6 +472,14 @@ const KeyboardShortcuts = memo(({
         name: t('Detect scene changes'),
         category: segmentsAndCutpointsCategory,
       },
+      ocrTimestamps: {
+        name: t('OCR timestamps from selected segments'),
+        category: segmentsAndCutpointsCategory,
+      },
+      reviewOcrTimestamps: {
+        name: t('Review OCR timestamps'),
+        category: segmentsAndCutpointsCategory,
+      },
       shuffleSegments: {
         name: t('Shuffle segments order'),
         category: segmentsAndCutpointsCategory,

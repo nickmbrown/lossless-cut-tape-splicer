@@ -96,6 +96,9 @@ import type { GenerateMergedOutFileNamesParams, GeneratedOutFileNames } from './
 import { generateCutFileNames as generateCutFileNamesRaw, generateCutMergedFileNames as generateCutMergedFileNamesRaw, generateMergedFileNames as generateMergedFileNamesRaw, defaultCutFileTemplate, defaultCutMergedFileTemplate, defaultMergedFileTemplate } from './util/outputNameTemplate';
 import { rightBarWidth, leftBarWidth, ffmpegExtractWindow, zoomMax } from './util/constants';
 import BigWaveform from './components/BigWaveform';
+import OcrCropOverlay from './components/OcrCropOverlay';
+import type { OcrCropResult } from './components/OcrCropOverlay';
+import useOcrTimestamps from './hooks/useOcrTimestamps';
 
 import type { BatchFile, Chapter, EdlExportType, EdlFileType, EdlImportType, FfmpegCommandLog, FilesMeta, FileStats, ParamsByFile, PlaybackMode, SegmentBase, SegmentColorIndex, SegmentTags, StateSegment, TunerType } from './types';
 import { goToTimecodeDirectArgsSchema, openFilesActionArgsSchema } from './types';
@@ -190,8 +193,8 @@ function App() {
   const [selectedBatchFiles, setSelectedBatchFiles] = useState<string[]>([]);
 
   const allUserSettings = useUserSettingsRoot();
-  const { captureFormat, keyframeCut, preserveMetadata, preserveMetadataOnMerge, preserveMovData, preserveChapters, movFastStart, avoidNegativeTs, autoMerge, timecodeFormat, invertCutSegments, autoExportExtraStreams, askBeforeClose, enableImportChapters, enableAskForFileOpenAction, playbackVolume, autoSaveProjectFile, wheelSensitivity, waveformHeight, invertTimelineScroll, language, ffmpegExperimental, hideNotifications, hideOsNotifications, autoLoadTimecode, autoDeleteMergedSegments, exportConfirmEnabled, segmentsToChapters, simpleMode, cutFileTemplate, cutMergedFileTemplate, mergedFileTemplate, keyboardSeekAccFactor, keyboardNormalSeekSpeed, keyboardSeekSpeed2, keyboardSeekSpeed3, treatInputFileModifiedTimeAsStart, treatOutputFileModifiedTimeAsStart, outFormatLocked, safeOutputFileName, enableAutoHtml5ify, segmentsToChaptersOnly, keyBindings, enableSmartCut, customFfPath, storeProjectInWorkingDir, enableOverwriteOutput, mouseWheelZoomModifierKey, mouseWheelFrameSeekModifierKey, mouseWheelKeyframeSeekModifierKey, captureFrameMethod, captureFrameQuality, captureFrameFileNameFormat, enableNativeHevc, cleanupChoices, darkMode, preferStrongColors, outputFileNameMinZeroPadding, cutFromAdjustmentFrames, cutToAdjustmentFrames, waveformMode: waveformModePreference, thumbnailsEnabled, keyframesEnabled, reducedMotion, ffmpegHwaccel } = allUserSettings.settings;
-  const { setCaptureFormat, setCustomOutDir, setKeyframeCut, setPlaybackVolume, setExportConfirmEnabled, setSimpleMode, setOutFormatLocked, setSafeOutputFileName, setKeyBindings, resetKeyBindings, setStoreProjectInWorkingDir, setCleanupChoices, toggleDarkMode, setWaveformMode, setThumbnailsEnabled, setKeyframesEnabled, prefersReducedMotion, customOutDir } = allUserSettings;
+  const { captureFormat, keyframeCut, preserveMetadata, preserveMetadataOnMerge, preserveMovData, preserveChapters, movFastStart, avoidNegativeTs, autoMerge, timecodeFormat, invertCutSegments, autoExportExtraStreams, askBeforeClose, enableImportChapters, enableAskForFileOpenAction, playbackVolume, autoSaveProjectFile, wheelSensitivity, waveformHeight, invertTimelineScroll, language, ffmpegExperimental, hideNotifications, hideOsNotifications, autoLoadTimecode, autoDeleteMergedSegments, exportConfirmEnabled, segmentsToChapters, simpleMode, cutFileTemplate, cutMergedFileTemplate, mergedFileTemplate, keyboardSeekAccFactor, keyboardNormalSeekSpeed, keyboardSeekSpeed2, keyboardSeekSpeed3, treatInputFileModifiedTimeAsStart, treatOutputFileModifiedTimeAsStart, outFormatLocked, safeOutputFileName, enableAutoHtml5ify, segmentsToChaptersOnly, keyBindings, enableSmartCut, customFfPath, storeProjectInWorkingDir, enableOverwriteOutput, mouseWheelZoomModifierKey, mouseWheelFrameSeekModifierKey, mouseWheelKeyframeSeekModifierKey, captureFrameMethod, captureFrameQuality, captureFrameFileNameFormat, enableNativeHevc, cleanupChoices, ocrCropRect, darkMode, preferStrongColors, outputFileNameMinZeroPadding, cutFromAdjustmentFrames, cutToAdjustmentFrames, waveformMode: waveformModePreference, thumbnailsEnabled, keyframesEnabled, reducedMotion, ffmpegHwaccel } = allUserSettings.settings;
+  const { setCaptureFormat, setCustomOutDir, setKeyframeCut, setPlaybackVolume, setExportConfirmEnabled, setSimpleMode, setOutFormatLocked, setSafeOutputFileName, setKeyBindings, resetKeyBindings, setStoreProjectInWorkingDir, setCleanupChoices, setOcrCropRect, toggleDarkMode, setWaveformMode, setThumbnailsEnabled, setKeyframesEnabled, prefersReducedMotion, customOutDir } = allUserSettings;
 
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(!simpleMode);
 
@@ -206,6 +209,22 @@ function App() {
   const { videoRef, videoContainerRef, playbackRate, setPlaybackRate, outputPlaybackRate, setOutputPlaybackRate, commandedTime, seekAbs, playingRef, getRelevantTime, setPlaying, onSeeked, relevantTime, onStartPlaying, setCommandedTime, setOutputPlaybackRateState, commandedTimeRef, onStopPlaying, onVideoAbort, playerTime, setPlayerTime, playbackMode, setPlaybackMode, playbackModeRef, playing, play, pause, seekRel } = useVideo({ filePath });
   const { timecodePlaceholder, formatTimecode, parseTimecode, getFrameCount, promptTimecode } = useTimecode({ detectedFps, timecodeFormat, showGenericDialog });
   const { loadSubtitle, subtitlesByStreamId, setSubtitlesByStreamId } = useSubtitles();
+
+  const [ocrMarqueeArmed, setOcrMarqueeArmed] = useState(false);
+  const ocrMarqueeCallbackRef = useRef<((result: OcrCropResult) => void) | undefined>(undefined);
+
+  // lets the user draw the OCR crop region over the video; resolves when they finish or cancel
+  const armOcrMarquee = useCallback(async () => new Promise<OcrCropResult>((resolve) => {
+    ocrMarqueeCallbackRef.current = resolve;
+    setOcrMarqueeArmed(true);
+  }), []);
+
+  const handleOcrMarqueeComplete = useCallback((result: OcrCropResult) => {
+    setOcrMarqueeArmed(false);
+    const callback = ocrMarqueeCallbackRef.current;
+    ocrMarqueeCallbackRef.current = undefined;
+    callback?.(result);
+  }, []);
 
   const fileDurationNonZero = isDurationValid(fileDuration) ? fileDuration : 1;
   const zoom = Math.floor(zoomUnrounded);
@@ -352,7 +371,7 @@ function App() {
   }, [isFileOpened]);
 
   const {
-    cutSegments, cutSegmentsHistory, createSegmentsFromKeyframes, shuffleSegments, detectBlackScenes, detectSilentScenes, detectSceneChanges, removeSegment, invertAllSegments, fillSegmentsGaps, combineOverlappingSegments, combineSelectedSegments, modifySelectedSegmentTimes, alignSegmentTimesToKeyframes, updateSegOrder, updateSegOrders, reorderSegsByStartTime, addSegment, setCutStart, setCutEnd, labelSegment, splitCurrentSegment, focusSegmentAtCursor, selectSegmentsAtCursor, createNumSegments, createFixedDurationSegments, createFixedByteSizedSegments, createRandomSegments, getSegEstimatedSize, haveInvalidSegs, currentSegIndexSafe, currentCutSeg, inverseCutSegments, clearSegments, clearSegColorCounter, loadCutSegments, setCutTime, setCurrentSegIndex, labelSelectedSegments, deselectAllSegments, selectAllSegments, selectOnlyCurrentSegment, toggleCurrentSegmentSelected, invertSelectedSegments, removeSelectedSegments, selectSegmentsByLabel, selectSegmentsByExpr, selectAllMarkers, mutateSegmentsByExpr, toggleSegmentSelected, selectOnlySegment, selectedSegments, segmentsOrInverse, segmentsToExport, duplicateCurrentSegment, duplicateSegment, updateSegAtIndex, findSegmentsAtCursor, maybeCreateFullLengthSegment, currentCutSegOrWholeTimeline, segColorCounter,
+    cutSegments, cutSegmentsHistory, createSegmentsFromKeyframes, shuffleSegments, detectBlackScenes, detectSilentScenes, detectSceneChanges, removeSegment, invertAllSegments, fillSegmentsGaps, combineOverlappingSegments, combineSelectedSegments, modifySelectedSegmentTimes, alignSegmentTimesToKeyframes, updateSegOrder, updateSegOrders, reorderSegsByStartTime, addSegment, setCutStart, setCutEnd, labelSegment, splitCurrentSegment, focusSegmentAtCursor, selectSegmentsAtCursor, createNumSegments, createFixedDurationSegments, createFixedByteSizedSegments, createRandomSegments, getSegEstimatedSize, haveInvalidSegs, currentSegIndexSafe, currentCutSeg, inverseCutSegments, clearSegments, clearSegColorCounter, loadCutSegments, setCutTime, setCurrentSegIndex, labelSelectedSegments, deselectAllSegments, selectAllSegments, selectOnlyCurrentSegment, toggleCurrentSegmentSelected, invertSelectedSegments, removeSelectedSegments, selectSegmentsByLabel, selectSegmentsByExpr, selectAllMarkers, mutateSegmentsByExpr, toggleSegmentSelected, selectOnlySegment, selectedSegments, segmentsOrInverse, segmentsToExport, duplicateCurrentSegment, duplicateSegment, updateSegAtIndex, findSegmentsAtCursor, maybeCreateFullLengthSegment, currentCutSegOrWholeTimeline, segColorCounter, showParametersDialog, getFfmpegParameters, setFfmpegParametersForDialog, safeSetCutSegments,
   } = useSegments({ filePath, workingRef, setWorking, setProgress, videoStream: activeVideoStream, fileDuration, getRelevantTime, maxLabelLength, checkFileOpened, invertCutSegments, segmentsToChaptersOnly, timecodePlaceholder, parseTimecode, appendFfmpegCommandLog, fileDurationNonZero, mainFileMeta: mainFileMeta?.ffprobeMeta, seekAbs, activeVideoStreamIndex, activeAudioStreamIndexes, handleError, showGenericDialog, simpleMode, ffmpegHwaccel });
 
   const { getEdlFilePath, projectFileSavePath, getProjectFileSavePath } = useSegmentsAutoSave({ autoSaveProjectFile, storeProjectInWorkingDir, filePath, customOutDir, cutSegments });
@@ -623,6 +642,10 @@ function App() {
   }, [compatPlayerEnabled]);
 
   const shouldShowPlaybackStreamSelector = videoStreams.length > 0 || audioStreams.length > 0 || (subtitleStreams.length > 0 && !compatPlayerEnabled);
+
+  // note: OCR captures frames from the original file (not the preview file), so the marquee assumes
+  // the preview video has the same aspect ratio as the original (it does, being a conversion of it)
+  const { ocrTimestamps, reviewOcrTimestamps } = useOcrTimestamps({ filePath, workingRef, setWorking, setProgress, fileDuration, selectedSegments, safeSetCutSegments, showParametersDialog, getFfmpegParameters, setFfmpegParametersForDialog, showGenericDialog, ocrCropRect, setOcrCropRect, armOcrMarquee, compatPlayerEnabled, seekAbs, formatTimecode, appendFfmpegCommandLog, handleError });
 
   const usingPreviewFile = !!previewFilePath;
   const effectiveFilePath = previewFilePath || filePath;
@@ -2181,6 +2204,8 @@ function App() {
       detectBlackScenes,
       detectSilentScenes,
       detectSceneChanges,
+      ocrTimestamps,
+      reviewOcrTimestamps,
       readAllKeyframes,
       createSegmentsFromKeyframes,
       toggleWaveformMode,
@@ -2200,7 +2225,7 @@ function App() {
     };
 
     return ret;
-  }, [togglePlaySelectedSegments, toggleLoopSelectedSegments, pause, timelineToggleComfortZoom, captureSnapshot, captureSnapshotAsCoverArt, captureSnapshotToClipboard, setCutStart, setCutEnd, cleanupFilesDialog, splitCurrentSegment, focusSegmentAtCursor, selectSegmentsAtCursor, increaseRotation, jumpCutStart, jumpCutEnd, jumpTimelineStart, jumpTimelineEnd, batchOpenSelectedFile, closeBatch, addSegment, duplicateCurrentSegment, toggleLastCommands, extractCurrentSegmentFramesAsImages, extractSelectedSegmentsFramesAsImages, reorderSegsByStartTime, invertAllSegments, fillSegmentsGaps, combineOverlappingSegments, combineSelectedSegments, createFixedDurationSegments, createNumSegments, createFixedByteSizedSegments, createRandomSegments, alignSegmentTimesToKeyframes, shuffleSegments, clearSegments, toggleSegmentsList, toggleStreamsSelector, extractAllStreams, convertFormatBatch, concatBatch, toggleCaptureFormat, toggleStripAudio, toggleStripVideo, toggleStripSubtitle, toggleStripThumbnail, toggleStripAll, toggleDarkMode, askStartTimeOffset, deselectAllSegments, selectAllSegments, selectOnlyCurrentSegment, editCurrentSegmentTags, toggleCurrentSegmentSelected, invertSelectedSegments, removeSelectedSegments, tryFixInvalidDuration, tryDecimate, shiftAllSegmentTimes, toggleMuted, copySegmentsToClipboard, handleShowStreamsSelectorClick, openFilesDialog, openDirDialog, toggleSettings, detectBlackScenes, detectSilentScenes, detectSceneChanges, readAllKeyframes, createSegmentsFromKeyframes, toggleWaveformMode, toggleShowThumbnails, toggleShowKeyframes, showIncludeExternalStreamsDialog, toggleFullscreenVideo, selectAllMarkers, selectSegmentsByLabel, selectSegmentsByExpr, labelSelectedSegments, mutateSegmentsByExpr, toggleKeyboardShortcuts, generateOverviewWaveform, checkFileOpened, cutSegments, seekRel, keyboardSeekAccFactor, togglePlay, play, userChangePlaybackRate, goToTimecode, keyboardNormalSeekSpeed, keyboardSeekSpeed2, keyboardSeekSpeed3, seekRelPercent, seekClosestKeyframe, shortStep, jumpSeg, zoomRel, batchFileJump, removeSegment, currentSegIndexSafe, cutSegmentsHistory, labelSegment, onExportPress, userHtml5ifyCurrentFile, toggleKeyframeCut, applyEnabledStreamsFilter, setPlaybackVolume, commandedTimeRef, closeFileWithConfirm, openSendReportDialogWithState]);
+  }, [togglePlaySelectedSegments, toggleLoopSelectedSegments, pause, timelineToggleComfortZoom, captureSnapshot, captureSnapshotAsCoverArt, captureSnapshotToClipboard, setCutStart, setCutEnd, cleanupFilesDialog, splitCurrentSegment, focusSegmentAtCursor, selectSegmentsAtCursor, increaseRotation, jumpCutStart, jumpCutEnd, jumpTimelineStart, jumpTimelineEnd, batchOpenSelectedFile, closeBatch, addSegment, duplicateCurrentSegment, toggleLastCommands, extractCurrentSegmentFramesAsImages, extractSelectedSegmentsFramesAsImages, reorderSegsByStartTime, invertAllSegments, fillSegmentsGaps, combineOverlappingSegments, combineSelectedSegments, createFixedDurationSegments, createNumSegments, createFixedByteSizedSegments, createRandomSegments, alignSegmentTimesToKeyframes, shuffleSegments, clearSegments, toggleSegmentsList, toggleStreamsSelector, extractAllStreams, convertFormatBatch, concatBatch, toggleCaptureFormat, toggleStripAudio, toggleStripVideo, toggleStripSubtitle, toggleStripThumbnail, toggleStripAll, toggleDarkMode, askStartTimeOffset, deselectAllSegments, selectAllSegments, selectOnlyCurrentSegment, editCurrentSegmentTags, toggleCurrentSegmentSelected, invertSelectedSegments, removeSelectedSegments, tryFixInvalidDuration, tryDecimate, shiftAllSegmentTimes, toggleMuted, copySegmentsToClipboard, handleShowStreamsSelectorClick, openFilesDialog, openDirDialog, toggleSettings, detectBlackScenes, detectSilentScenes, detectSceneChanges, ocrTimestamps, reviewOcrTimestamps, readAllKeyframes, createSegmentsFromKeyframes, toggleWaveformMode, toggleShowThumbnails, toggleShowKeyframes, showIncludeExternalStreamsDialog, toggleFullscreenVideo, selectAllMarkers, selectSegmentsByLabel, selectSegmentsByExpr, labelSelectedSegments, mutateSegmentsByExpr, toggleKeyboardShortcuts, generateOverviewWaveform, checkFileOpened, cutSegments, seekRel, keyboardSeekAccFactor, togglePlay, play, userChangePlaybackRate, goToTimecode, keyboardNormalSeekSpeed, keyboardSeekSpeed2, keyboardSeekSpeed3, seekRelPercent, seekClosestKeyframe, shortStep, jumpSeg, zoomRel, batchFileJump, removeSegment, currentSegIndexSafe, cutSegmentsHistory, labelSegment, onExportPress, userHtml5ifyCurrentFile, toggleKeyframeCut, applyEnabledStreamsFilter, setPlaybackVolume, commandedTimeRef, closeFileWithConfirm, openSendReportDialogWithState]);
 
   const getKeyboardAction = useCallback((action: MainKeyboardAction) => mainActions[action], [mainActions]);
 
@@ -2634,6 +2659,10 @@ function App() {
 
                     {fullscreen && (
                       <div style={{ position: 'absolute', bottom: 0, left: 0, height: '.1em', backgroundColor: 'var(--red-9)', width: calculateTimelinePercent(playerTime, fileDuration) }} />
+                    )}
+
+                    {ocrMarqueeArmed && (
+                      <OcrCropOverlay videoRef={videoRef} existingRect={ocrCropRect} onComplete={handleOcrMarqueeComplete} />
                     )}
                   </div>
 

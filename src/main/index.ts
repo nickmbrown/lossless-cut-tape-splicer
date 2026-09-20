@@ -36,6 +36,7 @@ import * as i18nCommon from './i18nCommon.js';
 import './i18n.js';
 import type { ApiActionRequest } from '../common/types.js';
 import * as ffmpeg from './ffmpeg.js';
+import * as ocr from './ocr.js';
 import * as compatPlayer from './compatPlayer.js';
 import { downloadMediaUrl } from './ffmpeg.js';
 import { hasDisabledNetworking, setDisableNetworking } from './networking.js';
@@ -467,6 +468,7 @@ export type RemoteRpcApi = {
 // using @electron/remote
 const remoteApiLegacy = {
   ffmpeg,
+  ocr,
   i18n: i18nCommon,
   compatPlayer,
   configStore,

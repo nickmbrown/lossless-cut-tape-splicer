@@ -435,6 +435,18 @@ export default ({ app, mainWindow, newVersion, isStoreBuild, openExternal }: {
           },
         },
         {
+          label: esc(t('OCR timestamps from selected segments')),
+          click() {
+            mainWindow.webContents.send('ocrTimestamps');
+          },
+        },
+        {
+          label: esc(t('Review OCR timestamps')),
+          click() {
+            mainWindow.webContents.send('reviewOcrTimestamps');
+          },
+        },
+        {
           label: esc(t('Last ffmpeg commands')),
           click() { mainWindow.webContents.send('toggleLastCommands'); },
         },
