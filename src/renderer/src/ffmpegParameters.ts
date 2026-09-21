@@ -37,7 +37,11 @@ const parametersRaw = {
   sceneChange: {
     minChange: {
       value: '0.3',
-      hint: () => i18n.t('Minimum change between two frames to be considered a new scene. A value between 0.3 and 0.5 is generally a sane choice.'),
+      hint: () => i18n.t('How much two frames must differ in brightness or colour to count as a new scene, from 0 to 1. A value between 0.3 and 0.5 is generally a sane choice; lower it if cuts are being missed.'),
+    },
+    minSegmentLength: {
+      value: '1',
+      hint: () => i18n.t('Minimum length in seconds of a detected segment. Scene changes closer together than this are ignored, which avoids a handful of noisy frames at a cut turning into their own tiny segment.'),
     },
   },
   ocrTimestamp: {

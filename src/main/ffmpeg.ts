@@ -16,6 +16,7 @@ import isDev from './isDev.js';
 import logger from './logger.js';
 import { parseFfmpegProgressLine } from './progress.js';
 import { formatFfmpegNumber, getFixChannelLayoutFilter, getHwaccelArgs, parseFfprobeDuration } from '../common/util.js';
+import { createSceneSegmenter } from '../common/sceneDetection.js';
 import { getFfmpegJpegQuality } from './ffmpegUtil.js';
 import { throwIfDisabledNetworking } from './networking.js';
 
@@ -302,10 +303,11 @@ interface DetectedSegment {
 }
 
 // https://stackoverflow.com/questions/35675529/using-ffmpeg-how-to-do-a-scene-change-detection-with-timecode
-export async function detectSceneChanges({ filePath, streamId, minChange, onProgress, onSegmentDetected, from, to, ffmpegHwaccel }: {
+export async function detectSceneChanges({ filePath, streamId, minChange, minSegmentLength = 0, onProgress, onSegmentDetected, from, to, ffmpegHwaccel }: {
   filePath: string,
   streamId: number | undefined
   minChange: number | string,
+  minSegmentLength?: number | undefined,
   onProgress: (p: number) => void,
   onSegmentDetected: (p: DetectedSegment) => void,
   from: number,
@@ -317,7 +319,11 @@ export async function detectSceneChanges({ filePath, streamId, minChange, onProg
     ...getHwaccelArgs(ffmpegHwaccel),
     ...getInputSeekArgs({ filePath, from, to }),
     '-map', streamId != null ? `0:${streamId}` : 'v:0',
-    '-filter:v', `select='gt(scene,${minChange})',metadata=print:file=-:direct=1`, // direct=1 to flush stdout immediately
+    // ffmpeg's `scene` value compares the first plane only, which for YUV is luma - so a cut
+    // between scenes of different colour but similar brightness scores ~0 and is missed at any
+    // threshold. Converting to planar RGB first makes that plane a mix of luma and chroma,
+    // which catches colour-only cuts (verified: red -> green at equal luma goes 0.00 -> 1.00).
+    '-filter:v', `format=gbrp,select='gt(scene,${minChange})',metadata=print:file=-:direct=1`, // direct=1 to flush stdout immediately
     '-f', 'null', '-',
   ];
   const process = runFfmpegProcess(args, { buffer: false });
@@ -327,22 +333,20 @@ export async function detectSceneChanges({ filePath, streamId, minChange, onProg
   assert(process.stdout != null);
   const rl = readline.createInterface({ input: process.stdout });
 
-  let lastTime: number | undefined;
+  const segmenter = createSceneSegmenter({ from, to, minSegmentLength, onSegment: onSegmentDetected });
 
   rl.on('line', (line) => {
     // eslint-disable-next-line unicorn/better-regex
     const match = line.match(/^frame:\d+\s+pts:\d+\s+pts_time:([\d.]+)/);
     if (!match) return;
     const time = parseFloat(match[1]!);
-    if (!Number.isNaN(time)) {
-      if (lastTime != null && time > lastTime) {
-        onSegmentDetected({ start: from + lastTime, end: from + time });
-      }
-      lastTime = time;
-    }
+    // pts_time restarts at 0 at the seek point, so shift it back onto the timeline
+    if (!Number.isNaN(time)) segmenter.addBoundary(from + time);
   });
 
   await process;
+
+  segmenter.finish();
 
   return { ffmpegArgs: args };
 }

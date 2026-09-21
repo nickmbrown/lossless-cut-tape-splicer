@@ -356,7 +356,9 @@ function useSegments({ filePath, workingRef, setWorking, setProgress, videoStrea
     // eslint-disable-next-line prefer-destructuring
     const minChange = parameters['minChange'];
     invariant(minChange != null);
-    await detectSegments({ name: 'sceneChanges', workingText: i18n.t('Detecting scene changes'), errorText: i18n.t('Failed to detect scene changes'), fn: async (onSegmentDetected) => ffmpegDetectSceneChanges({ filePath, streamId: activeVideoStreamIndex, minChange, onProgress: setProgress, onSegmentDetected, from: start, to: end, ffmpegHwaccel }) });
+    const minSegmentLengthRaw = parseFloat(parameters['minSegmentLength'] ?? '');
+    const minSegmentLength = Number.isFinite(minSegmentLengthRaw) && minSegmentLengthRaw > 0 ? minSegmentLengthRaw : 0;
+    await detectSegments({ name: 'sceneChanges', workingText: i18n.t('Detecting scene changes'), errorText: i18n.t('Failed to detect scene changes'), fn: async (onSegmentDetected) => ffmpegDetectSceneChanges({ filePath, streamId: activeVideoStreamIndex, minChange, minSegmentLength, onProgress: setProgress, onSegmentDetected, from: start, to: end, ffmpegHwaccel }) });
   }, [activeVideoStreamIndex, currentCutSegOrWholeTimeline, deleteCurrentCutSeg, detectSegments, ffmpegHwaccel, filePath, getFfmpegParameters, setFfmpegParametersForDialog, setProgress, showParametersDialog]);
 
   const createSegmentsFromKeyframes = useCallback(async () => {
