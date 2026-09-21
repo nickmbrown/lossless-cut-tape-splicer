@@ -8,6 +8,7 @@ import { mapSaveableSegments } from '../segments';
 import { getSuffixedOutPath } from '../util';
 import type { StateSegment } from '../types';
 import { errorToast } from '../swal';
+import mainApi from '../mainApi';
 import i18n from '../i18n';
 
 
@@ -56,9 +57,11 @@ export default ({ autoSaveProjectFile, storeProjectInWorkingDir, filePath, custo
         console.log('Saving project file', debouncedSaveOperation.projectFileSavePath, debouncedSaveOperation.cutSegments);
         await saveLlcProject({ savePath: debouncedSaveOperation.projectFileSavePath, mediaFilePath: debouncedSaveOperation.filePath, cutSegments: debouncedSaveOperation.cutSegments });
         lastSaveOperation.current = debouncedSaveOperation;
+        mainApi.logProjectSave(`saved ${debouncedSaveOperation.cutSegments.length} segments to ${debouncedSaveOperation.projectFileSavePath}`);
       } catch (err) {
         errorToast(i18n.t('Unable to save project file'));
         console.error('Failed to save project file', err);
+        mainApi.logProjectSave(`FAILED for ${debouncedSaveOperation?.projectFileSavePath}: ${err instanceof Error ? err.message : String(err)}`, true);
       }
     }
     save();

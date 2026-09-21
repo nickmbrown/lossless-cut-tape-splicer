@@ -450,6 +450,9 @@ function sendOsNotification(options: NotificationConstructorOptions) {
 const remoteApi = {
   pathExists,
   setFileTimes,
+  // renderer console output does not reach the log file, but whether the project saved is
+  // exactly the kind of thing worth being able to check afterwards
+  logProjectSave: (message: string, failed?: boolean) => (failed ? logger.error('project save:', message) : logger.info('project save:', message)),
   downloadMediaUrl,
   fileTypeFromFile,
   focusWindow,

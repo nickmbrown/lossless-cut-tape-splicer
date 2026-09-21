@@ -5,13 +5,13 @@ import { ZodError } from 'zod';
 
 import { parseSrtToSegments, formatSrt, parseCuesheet, parseXmeml, parseFcpXml, parseCsv, parseCutlist, parsePbf, parseEdl, formatCsvHuman, formatTsvHuman, formatCsvFrames, formatCsvSeconds, parseCsvTime, getFrameValParser, parseDvAnalyzerSummaryTxt, parseOtio } from './edlFormats';
 import { askForYouTubeInput, showOpenDialog } from './dialogs';
-import { getOutPath } from './util';
+import { fsOperationWithRetry, getOutPath } from './util';
 import type { EdlExportType, EdlFileType, EdlImportType, GetFrameCount, LlcProject, SegmentBase, StateSegment } from './types';
 import { llcProjectV1Schema, llcProjectV2Schema } from './types';
 import { mapSaveableSegments } from './segments';
 import isDev from './isDev';
 
-const { readFile, writeFile } = window.require('node:fs/promises');
+const { readFile, writeFile, copyFile } = window.require('node:fs/promises');
 const cueParser = window.require('cue-parser');
 const { basename } = window.require('node:path');
 
@@ -82,17 +82,32 @@ export async function saveSrt(path: string, cutSegments: SegmentBase[]) {
   await writeFile(path, formatSrt(cutSegments));
 }
 
+// A save replaces the only copy of the project, so keep the outgoing version alongside it.
+// No judgement is made about which version is "better" - combining a hundred detected scene
+// changes down to thirty segments is ordinary work, not a loss - it is simply one step back.
+async function backupExistingProject(savePath: string) {
+  try {
+    await copyFile(savePath, `${savePath}.bak`);
+  } catch {
+    // nothing to back up yet (first save), or the copy failed: never block the actual save
+  }
+}
+
 export async function saveLlcProject({ savePath, mediaFilePath, cutSegments }: {
   savePath: string,
   mediaFilePath: string,
   cutSegments: StateSegment[],
 }) {
+  await backupExistingProject(savePath);
+
   const projectData: LlcProject = {
     version: 2,
     mediaFileName: basename(mediaFilePath),
     cutSegments: mapSaveableSegments(cutSegments),
   };
-  await writeFile(savePath, JSON5.stringify(projectData, null, 2));
+  // project files often live on network drives, where a single write can fail transiently -
+  // retrying beats silently leaving the project unsaved
+  await fsOperationWithRetry(async () => writeFile(savePath, JSON5.stringify(projectData, null, 2)));
 }
 
 export async function loadLlcProject(path: string) {
