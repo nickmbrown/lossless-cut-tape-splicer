@@ -1,5 +1,6 @@
 import type { FormEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useDebounce } from 'use-debounce';
 import { useTranslation } from 'react-i18next';
 import { TextField } from '@radix-ui/themes';
 
@@ -52,13 +53,16 @@ export type OcrReviewOutcome =
   | { action: 'close' };
 
 // per-segment review of OCR results before they get written to segment tags
-export default async function openOcrReviewDialog({ showGenericDialog, rows, tagName, initialStates, onStateSnapshot }: {
+export default async function openOcrReviewDialog({ showGenericDialog, rows, tagName, initialStates, onStateSnapshot, onPersist }: {
   showGenericDialog: ShowGenericDialog,
   rows: OcrReviewRow[],
   tagName: string,
   initialStates?: OcrRowStates | undefined,
   // called with the latest edits whenever the dialog goes away, so they survive a close/reopen
   onStateSnapshot: (states: OcrRowStates) => void,
+  // called shortly after each edit, so that typed timestamps reach the segments (and from there
+  // the project file) instead of living only in this dialog until "write" is pressed
+  onPersist: (results: OcrReviewResult[]) => void,
 }) {
   return new Promise<OcrReviewOutcome>((resolve) => {
     function OcrReviewDialog() {
@@ -96,7 +100,11 @@ export default async function openOcrReviewDialog({ showGenericDialog, rows, tag
         // `rows` is fixed for the lifetime of the dialog (it comes from the enclosing scope)
       }, []);
 
+      // only start autosaving once something has actually been changed here, so that merely
+      // opening the editor does not commit the detected values on its own
+      const editedRef = useRef(false);
       const setRowState = useCallback((segId: string, newProps: Partial<{ include: boolean, value: string }>) => {
+        editedRef.current = true;
         setRowStates((existing) => ({ ...existing, [segId]: { ...existing[segId]!, ...newProps } }));
       }, []);
 
@@ -104,6 +112,17 @@ export default async function openOcrReviewDialog({ showGenericDialog, rows, tag
         const state = rowStates[row.segId];
         return state != null && state.include && sanitizeTagValue(state.value).length > 0;
       });
+
+      const [debouncedRowStates] = useDebounce(rowStates, 1000);
+      useEffect(() => {
+        if (!editedRef.current) return;
+        onPersist(rows.flatMap((row) => {
+          const state = debouncedRowStates[row.segId];
+          if (state == null || !state.include) return [];
+          const value = sanitizeTagValue(fromInputValue(state.value));
+          return value.length > 0 ? [{ segId: row.segId, value }] : [];
+        }));
+      }, [debouncedRowStates]);
 
       const handleSubmit = useCallback((e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -128,7 +147,7 @@ export default async function openOcrReviewDialog({ showGenericDialog, rows, tag
           <Dialog.Description>{t('Review the detected timestamps below. Uncheck rows to skip them, or edit the values before writing them to the segment tags.')}</Dialog.Description>
 
           <p style={{ opacity: 0.7, fontSize: '.9em', marginTop: 0 }}>
-            {t('Closing keeps these results: reopen them any time with Tools → Review OCR timestamps, without detecting again. Click a segment timecode to jump there and scrub the footage.')}
+            {t('Edits are saved to the segment tags as you make them, so nothing is lost if the app closes. Reopen this any time with Tools → Review OCR timestamps. Click a segment timecode to jump there and scrub the footage.')}
           </p>
 
           <form onSubmit={handleSubmit}>

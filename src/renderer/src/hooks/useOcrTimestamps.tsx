@@ -8,7 +8,7 @@ import { parseOcrTimestamp } from '../util/ocrTimestamp';
 import { inferTimestamps } from '../util/ocrTimestampInference';
 import type { DateOrder } from '../util/ocrTimestamp';
 import openOcrReviewDialog from '../components/OcrReviewDialog';
-import type { OcrReviewRow, OcrRowStates } from '../components/OcrReviewDialog';
+import type { OcrReviewResult, OcrReviewRow, OcrRowStates } from '../components/OcrReviewDialog';
 import type { ShowGenericDialog } from '../components/GenericDialog';
 import type { OcrCropResult } from '../components/OcrCropOverlay';
 import { errorToast } from '../swal';
@@ -74,6 +74,17 @@ export default function useOcrTimestamps({ filePath, workingRef, setWorking, set
     pendingReviewRef.current = undefined;
   }, [filePath]);
 
+  const writeResultsToSegments = useCallback((results: OcrReviewResult[], tagName: string) => {
+    if (results.length === 0) return;
+    const valueBySegId = new Map(results.map((result) => [result.segId, result.value]));
+    // a single state write, so the batch is one undo step - and the project autosave picks it up
+    safeSetCutSegments((existing) => existing.map((segment) => {
+      const value = valueBySegId.get(segment.segId);
+      if (value == null || getSegmentTags(segment)[tagName] === value) return segment;
+      return { ...segment, tags: { ...getSegmentTags(segment), [tagName]: value } };
+    }));
+  }, [safeSetCutSegments]);
+
   const openReview = useCallback(async () => {
     const pending = pendingReviewRef.current;
     if (pending == null) return;
@@ -86,6 +97,9 @@ export default function useOcrTimestamps({ filePath, workingRef, setWorking, set
       onStateSnapshot: (states) => {
         if (pendingReviewRef.current != null) pendingReviewRef.current.states = states;
       },
+      // keep edits safe while the editor is open: they go straight to the segments, which the
+      // project autosave then writes to disk
+      onPersist: (results) => writeResultsToSegments(results, pending.tagName),
     });
 
     if (outcome.action === 'seek') {
@@ -94,17 +108,11 @@ export default function useOcrTimestamps({ filePath, workingRef, setWorking, set
       return;
     }
 
-    if (outcome.action === 'write' && outcome.results.length > 0) {
-      const valueBySegId = new Map(outcome.results.map((result) => [result.segId, result.value]));
-      // a single state write: one undo step for the whole batch
-      safeSetCutSegments((existing) => existing.map((segment) => {
-        const value = valueBySegId.get(segment.segId);
-        if (value == null) return segment;
-        return { ...segment, tags: { ...getSegmentTags(segment), [pending.tagName]: value } };
-      }));
+    if (outcome.action === 'write') {
+      writeResultsToSegments(outcome.results, pending.tagName);
       // the rows stay available, so a mistake can be corrected without detecting again
     }
-  }, [safeSetCutSegments, seekAbs, showGenericDialog]);
+  }, [seekAbs, showGenericDialog, writeResultsToSegments]);
 
   // Rebuild an editing session from timestamps already saved on the segments, so that reopening
   // a project (where the in-memory session is gone) still picks up where the user left off.
