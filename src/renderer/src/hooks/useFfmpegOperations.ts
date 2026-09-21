@@ -602,8 +602,6 @@ function useFfmpegOperations({ filePath, treatInputFileModifiedTimeAsStart, trea
 
     const segments = getGuaranteedSegments(segmentsIn, fileDuration);
 
-    const recordingFileTimes: { path: string, ms: number }[] = [];
-
     const singleProgresses: Record<number, number> = {};
     function onSingleProgress(id: number, singleProgress: number) {
       singleProgresses[id] = singleProgress;
@@ -634,9 +632,13 @@ function useFfmpegOperations({ filePath, treatInputFileModifiedTimeAsStart, trea
 
       const finalOutPath = join(outputDir, cutFileNames[i]!);
 
-      // stamped onto the file itself once it exists (see below), so that "date created"/
-      // "date modified" show when the footage was shot rather than when it was exported
-      if (recordingInstant != null) recordingFileTimes.push({ path: finalOutPath, ms: recordingInstant.getTime() });
+      // Stamp each clip as soon as it is written, rather than all of them once the export
+      // finishes: an export that is cancelled or fails part way through should still leave
+      // the clips it did produce dated correctly.
+      const stampRecordingTime = async () => {
+        if (recordingInstant == null) return;
+        await mainApi.setFileTimes([{ path: finalOutPath, ms: recordingInstant.getTime() }]);
+      };
 
       if (await shouldSkipExistingFile(finalOutPath)) return { path: finalOutPath, created: false };
 
@@ -648,6 +650,7 @@ function useFfmpegOperations({ filePath, treatInputFileModifiedTimeAsStart, trea
         await losslessCutSingle({
           cutFrom: desiredCutFrom, cutTo, chaptersPath, outPath: finalOutPath, copyFileStreams, keyframeCut, avoidNegativeTs, fileDuration, rotation, allFilesMeta, outFormat, shortestFlag, ffmpegExperimental, preserveMetadata, preserveMovData, preserveChapters, movFastStart, paramsByFile, extraMetadata, onProgress: (progress) => onSingleProgress(i, progress),
         });
+        await stampRecordingTime();
         return { path: finalOutPath, created: true };
       }
 
@@ -741,6 +744,7 @@ function useFfmpegOperations({ filePath, treatInputFileModifiedTimeAsStart, trea
         const { streams: streamsAfterCut } = await readFileFfprobeMeta(losslessPartOutPath);
 
         await concatFiles({ paths: smartCutSegmentsToConcat, outDir: outputDir, outPath: finalOutPath, metadataFromPath: losslessPartOutPath, outFormat, includeAllStreams: true, streams: streamsAfterCut, ffmpegExperimental, preserveMovData, movFastStart, chapters, preserveMetadataOnMerge, videoTimebase, extraMetadata, onProgress: onConcatProgress });
+        await stampRecordingTime();
         return { path: finalOutPath, created: true };
       } finally {
         await tryDeleteFiles(smartCutSegmentsToConcat);
@@ -748,12 +752,7 @@ function useFfmpegOperations({ filePath, treatInputFileModifiedTimeAsStart, trea
     };
 
     try {
-      const cutResults = await pMap(segments, cutSegment, { concurrency: 1 });
-
-    // after the files exist: ffmpeg's own timestamp transfer has run by now, so this wins
-    if (recordingFileTimes.length > 0) await mainApi.setFileTimes(recordingFileTimes);
-
-    return cutResults;
+      return await pMap(segments, cutSegment, { concurrency: 1 });
     } finally {
       if (chaptersPath) await tryDeleteFiles([chaptersPath]);
     }
